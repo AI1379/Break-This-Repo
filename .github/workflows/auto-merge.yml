@@ -1,0 +1,124 @@
+name: Auto Merge All PRs
+
+on:
+  schedule:
+    # Every 5 minutes (minimum interval GitHub Actions supports;
+    # actual runs may be delayed by a few minutes under load)
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write      # needed for PR comments/labels via gh
+  contents: write
+
+concurrency:
+  group: auto-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history: protected-section diff needs origin/main blobs
+
+      - name: Merge open PRs (skipping protected changes)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          MARKER="PROTECTED ZONE ENDS HERE"
+          REASON=""
+
+          # Paths a PR adds/modifies/deletes/renames (renames include the old path too)
+          changed_paths() {
+            gh pr view "$1" --json files --jq '.files[] | (.path, (.previous_filename // empty))'
+          }
+
+          # Everything in a README blob up to and including the marker line
+          protected_section() {
+            git show "$1" | awk -v m="$MARKER" '{print} index($0,m){exit}'
+          }
+
+          # Fetches the PR head into FETCH_HEAD; sets REASON and returns 0 if protected
+          touches_protected() {
+            local pr=$1
+            git fetch -q origin "pull/$pr/head" 2>/dev/null || {
+              REASON="head could not be fetched (conservative skip)"
+              return 0
+            }
+            if grep -qE '^\.github(/|$)' < <(changed_paths "$pr"); then
+              REASON="touches the protected \`.github/\` directory"
+              return 0
+            fi
+            if grep -qx 'README.md' < <(changed_paths "$pr"); then
+              if ! git cat-file -e "FETCH_HEAD:README.md" 2>/dev/null; then
+                REASON="deletes \`README.md\`"
+                return 0
+              fi
+              if ! grep -qF "$MARKER" <(git show "FETCH_HEAD:README.md"); then
+                REASON="removes the protection marker from \`README.md\`"
+                return 0
+              fi
+              if ! diff <(protected_section "origin/main:README.md") \
+                        <(protected_section "FETCH_HEAD:README.md") >/dev/null; then
+                REASON="modifies the protected section of \`README.md\` (everything above the marker)"
+                return 0
+              fi
+            fi
+            return 1
+          }
+
+          gh label create protected --color B60205 \
+            --description "Touches protected paths; auto-closed" >/dev/null 2>&1 || true
+          gh label create conflict --color FBCA04 \
+            --description "Merge conflict; resolves itself once fixed" >/dev/null 2>&1 || true
+          gh label create was-conflicted --color D876E3 \
+            --description "Had a merge conflict at some point; resolved and merged" >/dev/null 2>&1 || true
+
+          PRS=$(gh pr list --state open --limit 200 --json number,isDraft \
+                  --jq '.[] | select(.isDraft | not) | .number')
+          if [ -z "$PRS" ]; then
+            echo "No open PRs."
+            exit 0
+          fi
+
+          for pr in $PRS; do
+            echo "=== PR #$pr ==="
+            if touches_protected "$pr"; then
+              echo "🚫 Skipping: $REASON"
+              if ! grep -qx protected <(gh pr view "$pr" --json labels --jq '.labels[].name'); then
+                printf '%s\n' "🚫 **Auto-merge skipped: this PR $REASON.**" "" "The \`.github/\` directory and the protected section of \`README.md\` (everything above the \`PROTECTED ZONE ENDS HERE\` marker) are off-limits and cannot be changed via pull requests. Everything below the marker is fair game - fix the PR and it will merge automatically." > /tmp/comment.md
+                gh pr comment "$pr" --body-file /tmp/comment.md >/dev/null || echo "  (comment failed)"
+                gh pr edit "$pr" --add-label protected >/dev/null || true
+                gh pr close "$pr" >/dev/null || true
+              fi
+              continue
+            fi
+            HEAD_SHA=$(git rev-parse FETCH_HEAD^{commit})
+            echo "Merging at $HEAD_SHA ..."
+            if gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$pr/merge" \
+                 -f merge_method=merge -f sha="$HEAD_SHA" >/dev/null; then
+              echo "✅ Merged PR #$pr"
+              # Only PRs that are coming OUT of the conflict state get was-conflicted;
+              # never-conflicted merges must stay unlabeled
+              if grep -qx conflict <(gh pr view "$pr" --json labels --jq '.labels[].name'); then
+                gh pr edit "$pr" --remove-label conflict >/dev/null 2>&1 || true
+                gh pr edit "$pr" --add-label was-conflicted >/dev/null 2>&1 || true
+              fi
+            else
+              MERGEABLE=$(gh pr view "$pr" --json mergeable --jq '.mergeable')
+              if [ "$MERGEABLE" = "CONFLICTING" ]; then
+                echo "🔀 PR #$pr has conflicts — labeling, NOT closing. Re-resolve and it merges automatically."
+                if ! grep -qx conflict <(gh pr view "$pr" --json labels --jq '.labels[].name'); then
+                  printf '%s\n' "🔀 **This PR has merge conflicts with \`main\`, so auto-merge can't apply it yet.**" "" "No need to reopen or do anything drastic — just [update the branch](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/keeping-your-pull-request-in-sync-with-the-base-branch) (merge or rebase \`main\` into it, resolving the conflict). Once it merges cleanly, it will be merged automatically." > /tmp/conflict-comment.md
+                  gh pr comment "$pr" --body-file /tmp/conflict-comment.md >/dev/null || echo "  (comment failed)"
+                  gh pr edit "$pr" --add-label conflict >/dev/null || true
+                fi
+              else
+                echo "⚠️ Could not merge PR #$pr (head moved / transient error) - retried next cycle if still open"
+              fi
+            fi
+          done
