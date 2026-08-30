@@ -1,10 +1,8 @@
 name: Auto Merge All PRs
 
 on:
-  schedule:
-    # Every 5 minutes (minimum interval GitHub Actions supports;
-    # actual runs may be delayed by a few minutes under load)
-    - cron: "*/5 * * * *"
+  pull_request:
+    types: [opened, synchronize]
   workflow_dispatch:
 
 permissions:
