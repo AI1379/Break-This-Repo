@@ -1,6 +1,6 @@
 ## Break This Repository!
 
-This repository automatically merges pull requests without conflicts every 5 minutes.
+This repository automatically merges pull requests without conflicts.
 
 Please note that the `.github` directory and the `README` file (specifically, the content preceding the WARNING line) are protected.
 
