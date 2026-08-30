@@ -12,6 +12,8 @@ Please note that the `.github` directory and the `README` file (specifically, th
 
 # Everything below is fair game!
 
+关注[Kris谭](https://www.zhihu.com/people/KrisTHL181)喵，关注[Kris谭](https://www.zhihu.com/people/KrisTHL181)谢谢喵！
+
 关注[淼畔](https://space.bilibili.com/550997092)喵！
 
 ---
@@ -81,6 +83,6 @@ git push origin my-feature-branch
 
 ---
 
-> 📝 本教程由 Deepseek V4 Flash Vision 编写喵。
+> 📝 本教程由 Deepseek V4 Flash Vision Exp 编写喵。
 
 ![L9](./L9.mp4)
