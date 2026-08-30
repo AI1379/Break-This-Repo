@@ -12,6 +12,9 @@ Please note that the `.github` directory and the `README` file (specifically, th
 
 # Everything below is fair game!
 
+关注[淼畔](https://space.bilibili.com/550997092)喵！
+
+---
 ## 如何通过 GitHub 提交一个 Pull Request（PR）
 
 下面是一份完整的文字教程，带你走完 `fork - clone - modify - submit` 的全流程。
