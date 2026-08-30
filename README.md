@@ -15,6 +15,7 @@ Please note that the `.github` directory and the `README` file (specifically, th
 关注[Kris谭](https://www.zhihu.com/people/KrisTHL181)喵，关注[Kris谭](https://www.zhihu.com/people/KrisTHL181)谢谢喵！
 
 关注[淼畔](https://space.bilibili.com/550997092)喵！
+关注[Silvaire](https://github.com/silvaire-qwq)喵！关注[Miracle](https://github.com/miralous/miracle)喵！关注[Lankshare](https://github.com/Lankshare/Data/issues/new?template=create-link.yaml)喵！
 
 ---
 ## 如何通过 GitHub 提交一个 Pull Request（PR）喵
